@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SPK Kinerja Karyawan RS</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <style>
+        body { background-color: #f8f9fa; overflow-x: hidden; }
+        .sidebar { min-height: 100vh; width: 260px; background: #212529; color: white; position: fixed; top: 0; left: 0; padding-top: 20px; z-index: 1000; }
+        .sidebar h4 { text-align: center; margin-bottom: 20px; color: #fff; font-weight: bold; }
+        .sidebar hr { border-color: #495057; }
+        .nav-link { color: #adb5bd; margin: 5px 10px; border-radius: 5px; cursor: pointer; transition: 0.3s; }
+        .nav-link:hover { color: white; background: #343a40; }
+        .nav-link.active { background: #0d6efd; color: white; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .content { margin-left: 260px; padding: 30px; width: calc(100% - 260px); }
+        .hidden { display: none !important; }
+        .card { border: none; box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.05); border-radius: 12px; }
+        h2 { color: #343a40; border-bottom: 3px solid #0d6efd; display: inline-block; padding-bottom: 5px; margin-bottom: 25px; }
+        .table thead { background-color: #212529; color: white; }
+
+        /* --- KOP SURAT UNTUK PRINT (DISEMBUNYIKAN SAAT DI WEB) --- */
+        .kop-surat { display: none; text-align: center; border-bottom: 3px solid black; padding-bottom: 10px; margin-bottom: 20px; }
+        .kop-surat h3 { margin: 0; font-weight: bold; text-transform: uppercase; }
+        .kop-surat p { margin: 0; font-size: 14px; }
+
+        /* --- PENGATURAN KHUSUS CETAK PDF (@media print) --- */
+        @media print {
+            body { background-color: white !important; }
+            .sidebar { display: none !important; } /* Sembunyikan Sidebar */
+            .content { margin-left: 0 !important; width: 100% !important; padding: 0 !important; }
+            .no-print { display: none !important; } /* Sembunyikan semua tombol saat diprint */
+            .card { box-shadow: none !important; border: none !important; padding: 0 !important; }
+            .kop-surat { display: block !important; } /* Munculkan Kop Surat */
+            h2 { border-bottom: none; margin-bottom: 10px; font-size: 18px; text-align: center; }
+            /* Memaksa background tabel tetap berwarna saat diprint */
+            .table-dark th { background-color: #212529 !important; color: white !important; -webkit-print-color-adjust: exact; }
+            .bg-warning { background-color: #ffc107 !important; -webkit-print-color-adjust: exact; }
+            .badge { border: 1px solid black; color: black !important; background: transparent !important; } /* Ubah badge jadi kotak biasa agar rapi di kertas */
+        }
+    </style>
+</head>
+<body>
+
+<div class="sidebar no-print">
+    <h4>🏥 SPK HRD RS</h4>
+    <hr>
+    <ul class="nav flex-column">
+        <li class="nav-item"><a class="nav-link active" onclick="showSection('homeSec', this)">🏠 Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link" onclick="loadAlternatif(this)">👥 Karyawan & Penilaian</a></li>
+        <li class="nav-item"><a class="nav-link" onclick="loadKriteria(this)">📝 Data Kriteria</a></li>
+        <li class="nav-item"><a class="nav-link" onclick="loadRanking(this)">🏆 Hasil Ranking</a></li>
+        <li class="nav-item"><a class="nav-link" onclick="loadPrediksiPage(this)">🤖 Analisa Pola (C4.5)</a></li>
+        <hr>
+        <li class="nav-item"><a class="nav-link text-danger" onclick="logout()">🚪 Logout</a></li>
+    </ul>
+</div>
+
+<div class="content">
+
+    <div class="kop-surat">
+        <h3>RUMAH SAKIT UMUM DAERAH (RSUD) SEJAHTERA</h3>
+        <p>Jl. Mahasiswa Pejuang No. 1, Kota Kelulusan, Kode Pos 12345</p>
+        <p>Telp: (021) 1234567 | Email: hrd@rsudsejahtera.com</p>
+    </div>
+
+    <div id="homeSec">
+        <h2>Dashboard Penilaian Kinerja 🏥</h2>
+        <p class="lead">Sistem Pendukung Keputusan Karyawan Tetap Terbaik Rumah Sakit.</p>
+        <div class="row g-4 mt-2">
+            <div class="col-md-4"><div class="card p-4 bg-primary text-white h-100"><h3>AHP</h3><p>Pembobotan 5 Kriteria Kinerja</p></div></div>
+            <div class="col-md-4"><div class="card p-4 bg-success text-white h-100"><h3>SAW</h3><p>Pemeringkatan (TERPILIH / GAGAL)</p></div></div>
+            <div class="col-md-4"><div class="card p-4 bg-warning text-dark h-100"><h3>C4.5</h3><p>Data Mining (TERBAIK / TERPILIH / GAGAL)</p></div></div>
+        </div>
+    </div>
+
+    <div id="alternatifSec" class="hidden">
+        <h2 class="no-print">👥 Data Karyawan & Input Penilaian</h2>
+
+        <div class="card mb-4 p-4 border-success no-print" style="border-left-width: 5px;">
+            <h5>📥 Upload Karyawan & Nilai via Excel</h5>
+            <p class="text-muted small">Format Header Excel baris pertama: <strong>kode, nama, jabatan, C1, C2, C3, C4, C5</strong></p>
+            <div class="d-flex gap-2">
+                <input type="file" id="excelFile" class="form-control w-50" accept=".xlsx, .xls">
+                <button class="btn btn-success fw-bold" onclick="uploadExcel()">Upload & Simpan Semua</button>
+            </div>
+        </div>
+
+        <div class="card mb-4 p-4 no-print">
+            <h5>➕ Tambah Karyawan & Nilai Manual</h5>
+            <div class="row g-3 mb-3">
+                <div class="col-md-3"><input type="text" id="altKode" class="form-control" placeholder="Kode (misal: K1)"></div>
+                <div class="col-md-5"><input type="text" id="altNama" class="form-control" placeholder="Nama Lengkap Karyawan"></div>
+                <div class="col-md-4"><input type="text" id="altJabatan" class="form-control" placeholder="Divisi / Jabatan"></div>
+            </div>
+            <hr>
+            <h6 class="mb-3">Input Nilai Kinerja (Otomatis maks 10):</h6>
+            <div class="row g-3 mb-4">
+                <div class="col-md-2"><label class="small text-muted fw-bold">C1 (Kualitas)</label><input type="number" id="valC1" class="form-control" placeholder="Maks 10" step="0.1"></div>
+                <div class="col-md-2"><label class="small text-muted fw-bold">C2 (Skill)</label><input type="number" id="valC2" class="form-control" placeholder="Maks 10" step="0.1"></div>
+                <div class="col-md-4"><label class="small text-danger fw-bold">C3 (Absensi)</label><input type="number" id="valC3" class="form-control" placeholder="Tulis Angka Jumlah Hari"></div>
+                <div class="col-md-2"><label class="small text-muted fw-bold">C4 (Kerjasama)</label><input type="number" id="valC4" class="form-control" placeholder="Maks 10" step="0.1"></div>
+                <div class="col-md-2"><label class="small text-muted fw-bold">C5 (T. Jawab)</label><input type="number" id="valC5" class="form-control" placeholder="Maks 10" step="0.1"></div>
+            </div>
+            <button class="btn btn-primary w-100 fw-bold py-2" onclick="addAlternatif()">💾 Simpan Karyawan beserta Nilainya</button>
+        </div>
+
+        <div class="card p-3">
+            <table class="table table-hover table-bordered mb-0">
+                <thead class="table-dark"><tr><th>ID</th><th>Kode</th><th>Nama</th><th>Divisi</th><th class="no-print">Aksi</th></tr></thead>
+                <tbody id="tabelAlternatif"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="kriteriaSec" class="hidden">
+        <h2>📝 Kriteria Kinerja & Bobot AHP</h2>
+        <div class="card p-3">
+            <table class="table table-bordered table-striped mb-0">
+                <thead class="table-dark"><tr><th>Kode</th><th>Nama Kriteria</th><th>Sifat</th><th>Bobot AHP</th></tr></thead>
+                <tbody id="tabelKriteria"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="rankingSec" class="hidden">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2>🏆 Laporan Hasil Seleksi Tahap 1 (AHP)</h2>
+            <div class="no-print">
+                <button class="btn btn-info text-white fw-bold me-2" onclick="loadRanking()">🔄 Refresh</button>
+                <button class="btn btn-secondary fw-bold shadow" onclick="window.print()">🖨️ Cetak PDF</button>
+            </div>
+        </div>
+        
+        <div class="card p-0 overflow-hidden">
+            <table class="table table-hover mb-0 table-bordered">
+                <thead class="bg-warning text-dark"><tr><th class="py-3">Peringkat</th><th class="py-3">Nama Karyawan</th><th class="py-3">Skor (AHP)</th><th class="py-3">Status Evaluasi</th></tr></thead>
+                <tbody id="tabelRanking"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="prediksiSec" class="hidden">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2>🤖 Laporan Keputusan Akhir (C4.5 AI)</h2>
+            <div class="no-print">
+                <button class="btn btn-info text-white fw-bold me-2" onclick="jalankanC45()">🔄 Refresh Analisa</button>
+                <button class="btn btn-secondary fw-bold shadow" onclick="window.print()">🖨️ Cetak PDF</button>
+            </div>
+        </div>
+        
+        <div id="c45ResultContainer">
+            <div class="card p-4 mb-4 bg-dark text-white border-warning no-print" style="border-width: 2px;">
+                <h5 class="text-white-50">🌲 Standar Aturan Kinerja RS (Decision Tree):</h5>
+                <h4 id="textRule" class="text-warning mt-2 lh-base" style="word-wrap: break-word;">Loading AI...</h4>
+            </div>
+            <div class="card p-0">
+                <table class="table table-bordered table-striped mb-0">
+                    <thead class="table-dark"><tr><th>Nama</th><th>Hasil AHP</th><th>Klasifikasi C4.5</th><th>Catatan Keputusan</th></tr></thead>
+                    <tbody id="tabelC45"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script src="script.js?v=4"></script>
+</body>
+</html>
