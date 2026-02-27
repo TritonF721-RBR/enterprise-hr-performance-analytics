@@ -31,6 +31,8 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable) // Matikan CSRF (tidak butuh karena pakai Token)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource())) // Izinkan Frontend akses
                 .authorizeHttpRequests(auth -> auth
+
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         // PENTING: URL ini boleh diakses TANPA Login
                         .requestMatchers("/api/auth/**").permitAll()
 

@@ -29,7 +29,18 @@ async function fetchAPI(endpoint, method = 'GET', body = null) {
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
     };
     if (body) options.body = JSON.stringify(body);
-    return await fetch(`${API_URL}${endpoint}`, options);
+    try {
+        const response = await fetch(`${API_URL}${endpoint}`, options);
+        if (response.status === 403) {
+            alert("Sesi berakhir (403). Silakan Logout dan Login kembali.");
+            logout();
+        }
+        return response;
+    } catch (e) {
+        console.error(e);
+        alert("Koneksi ke Docker Gagal! Pastikan kontainer menyala.");
+        return { ok: false };
+    }
 }
 
 // --- 3. HELPER INPUT (ABSENSI & LIMIT) ---
@@ -56,17 +67,23 @@ function batasiNilai(nilai) {
     return Math.max(0, Math.min(10, n));
 }
 
-// --- 4. DATA KARYAWAN (LOAD, ADD, HAPUS, EXCEL) ---
+// --- 4. DATA KARYAWAN (LOAD, ADD, HAPUS, HAPUS SEMUA, EXCEL) ---
 async function loadAlternatif(el) {
     if (el) showSection('alternatifSec', el);
     const res = await fetchAPI('/alternatif');
+    if (!res.ok) return;
     const data = await res.json();
     let html = '';
-    data.forEach((item, idx) => {
-        html += `<tr><td>${idx + 1}</td><td><span class="badge bg-primary">${item.kode}</span></td>
-                 <td>${item.nama}</td><td>${item.jabatan}</td>
-                 <td><button class="btn btn-sm btn-danger" onclick="hapusAlternatif(${item.id})">Hapus</button></td></tr>`;
-    });
+
+    if (data.length === 0) {
+        html = '<tr><td colspan="5" class="text-center text-muted py-4">Belum ada data karyawan. Silakan tambah manual atau upload Excel.</td></tr>';
+    } else {
+        data.forEach((item, idx) => {
+            html += `<tr><td>${idx + 1}</td><td><span class="badge bg-primary">${item.kode}</span></td>
+                     <td>${item.nama}</td><td>${item.jabatan}</td>
+                     <td class="no-print"><button class="btn btn-sm btn-danger" onclick="hapusAlternatif(${item.id})">Hapus</button></td></tr>`;
+        });
+    }
     document.getElementById('tabelAlternatif').innerHTML = html;
 }
 
@@ -110,6 +127,25 @@ async function hapusAlternatif(id) {
     }
 }
 
+async function hapusSemuaKaryawan() {
+    if (confirm("⚠️ PERINGATAN KERAS!\n\nApakah Anda yakin ingin menghapus SELURUH data karyawan beserta nilainya? Tindakan ini tidak bisa dibatalkan!")) {
+        const res = await fetchAPI('/alternatif');
+        if (!res.ok) return alert("❌ Gagal terhubung ke server!");
+
+        const data = await res.json();
+        if (data.length === 0) return alert("ℹ️ Data karyawan sudah kosong, Komandan!");
+
+        let sukses = 0;
+        for (let item of data) {
+            const delRes = await fetchAPI(`/alternatif/${item.id}`, 'DELETE');
+            if (delRes.ok) sukses++;
+        }
+
+        alert(`✅ SAPU BERSIH SUKSES!\nBerhasil menghapus ${sukses} data karyawan.`);
+        loadAlternatif(null);
+    }
+}
+
 async function uploadExcel() {
     const file = document.getElementById('excelFile').files[0];
     if(!file) return alert("Pilih file Excel!");
@@ -133,6 +169,7 @@ async function uploadExcel() {
         }
         alert("✅ Upload Excel Selesai!");
         loadAlternatif(null);
+        document.getElementById('excelFile').value = '';
     };
     reader.readAsArrayBuffer(file);
 }
@@ -141,13 +178,19 @@ async function uploadExcel() {
 async function loadKriteria(el) {
     if (el) showSection('kriteriaSec', el);
     const res = await fetchAPI('/kriteria');
+    if (!res.ok) return;
     const data = await res.json();
     let html = '';
-    data.forEach(k => {
-        html += `<tr><td><b>${k.kode}</b></td><td>${k.nama}</td>
-                 <td><span class="badge bg-${k.jenis==='BENEFIT'?'success':'danger'}">${k.jenis}</span></td>
-                 <td>${k.bobotAHP ? k.bobotAHP.toFixed(4) : '-'}</td></tr>`;
-    });
+
+    if (data.length === 0) {
+        html = '<tr><td colspan="4" class="text-center text-muted py-3">Data Kosong. Klik "Setup Awal" di atas!</td></tr>';
+    } else {
+        data.forEach(k => {
+            html += `<tr><td><b>${k.kode}</b></td><td>${k.nama}</td>
+                     <td><span class="badge bg-${k.jenis==='BENEFIT'?'success':'danger'}">${k.jenis}</span></td>
+                     <td>${k.bobotAHP ? k.bobotAHP.toFixed(4) : '-'}</td></tr>`;
+        });
+    }
     document.getElementById('tabelKriteria').innerHTML = html;
 }
 
@@ -160,6 +203,11 @@ async function suntikKriteriaAwal() {
 document.addEventListener('submit', async function(e) {
     if (e.target && e.target.id === 'formAhp') {
         e.preventDefault();
+
+        if (document.getElementById('tabelKriteria').rows.length <= 1 && document.getElementById('tabelKriteria').innerText.includes("Kosong")) {
+            return alert("❌ ERROR: Klik tombol kuning 'Setup Awal' dulu!");
+        }
+
         const payload = {
             "perbandingan": {
                 "1": { "2": parseFloat(document.getElementById('c1_2').value), "3": parseFloat(document.getElementById('c1_3').value), "4": parseFloat(document.getElementById('c1_4').value), "5": parseFloat(document.getElementById('c1_5').value) },
@@ -177,26 +225,54 @@ document.addEventListener('submit', async function(e) {
 async function loadRanking(el) {
     if (el) showSection('rankingSec', el);
     const res = await fetchAPI('/ranking');
+    if (!res.ok) return;
     const data = await res.json();
     let table = '';
-    data.forEach(r => {
-        let badge = (r.status.toUpperCase() === 'TERPILIH') ? 'bg-success' : 'bg-danger';
-        table += `<tr><td><h3>#${r.rank}</h3></td><td><b>${r.nama}</b></td>
-                  <td><h5 class="text-primary">${r.skorAkhir.toFixed(4)}</h5></td>
-                  <td><span class="badge ${badge}">${r.status}</span></td></tr>`;
-    });
+
+    if (data.length === 0) {
+        table = '<tr><td colspan="4" class="text-center text-muted py-4">Belum ada data untuk diranking.</td></tr>';
+    } else {
+        data.forEach(r => {
+            let badge = (r.status.toUpperCase() === 'TERPILIH') ? 'bg-success' : 'bg-danger';
+            table += `<tr><td><h3>#${r.rank}</h3></td><td><b>${r.nama}</b></td>
+                      <td><h5 class="text-primary">${r.skorAkhir.toFixed(4)}</h5></td>
+                      <td><span class="badge ${badge}">${r.status}</span></td></tr>`;
+        });
+    }
     document.getElementById('tabelRanking').innerHTML = table;
 }
 
 async function loadPrediksiPage(el) {
     if (el) showSection('prediksiSec', el);
     const res = await fetchAPI('/c45/analyze');
+    if (!res.ok) return;
     const data = await res.json();
-    document.getElementById('textRule').innerText = data.ruleGenerated;
+
+    document.getElementById('textRule').innerText = data.ruleGenerated || "Belum ada pola (Decision Tree) yang dapat dibentuk.";
+
     let rows = '';
-    data.details.forEach(d => {
-        rows += `<tr><td><b>${d.nama}</b></td><td>${d.statusAHP}</td>
-                 <td class="fw-bold">${d.prediksiC45}</td><td><small>${d.keterangan}</small></td></tr>`;
-    });
+    if (!data.details || data.details.length === 0) {
+        rows = '<tr><td colspan="4" class="text-center text-muted py-4">Belum ada data untuk dianalisa C4.5.</td></tr>';
+    } else {
+        // --- LOGIKA SORTING BERDASARKAN HASIL C4.5 ---
+        const orderPriority = {
+            'TERBAIK': 1,
+            'TERPILIH': 2,
+            'GAGAL': 3
+        };
+
+        data.details.sort((a, b) => {
+            let rankA = orderPriority[a.prediksiC45.toUpperCase()] || 4;
+            let rankB = orderPriority[b.prediksiC45.toUpperCase()] || 4;
+            return rankA - rankB;
+        });
+        // ---------------------------------------------
+
+        data.details.forEach(d => {
+            let badgeClass = d.prediksiC45 === 'TERBAIK' ? 'text-success' : (d.prediksiC45 === 'TERPILIH' ? 'text-primary' : 'text-danger');
+            rows += `<tr><td><b>${d.nama}</b></td><td>${d.statusAHP}</td>
+                     <td class="fw-bold ${badgeClass}">${d.prediksiC45}</td><td><small>${d.keterangan}</small></td></tr>`;
+        });
+    }
     document.getElementById('tabelC45').innerHTML = rows;
 }

@@ -6,7 +6,7 @@
     <title>SPK Kinerja Karyawan RS</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    
+
     <style>
         body { background-color: #f8f9fa; overflow-x: hidden; }
         .sidebar { min-height: 100vh; width: 260px; background: #212529; color: white; position: fixed; top: 0; left: 0; padding-top: 20px; z-index: 1000; }
@@ -21,24 +21,23 @@
         h2 { color: #343a40; border-bottom: 3px solid #0d6efd; display: inline-block; padding-bottom: 5px; margin-bottom: 25px; }
         .table thead { background-color: #212529; color: white; }
 
-        /* --- KOP SURAT UNTUK PRINT (DISEMBUNYIKAN SAAT DI WEB) --- */
+        /* --- KOP SURAT UNTUK PRINT --- */
         .kop-surat { display: none; text-align: center; border-bottom: 3px solid black; padding-bottom: 10px; margin-bottom: 20px; }
         .kop-surat h3 { margin: 0; font-weight: bold; text-transform: uppercase; }
         .kop-surat p { margin: 0; font-size: 14px; }
 
-        /* --- PENGATURAN KHUSUS CETAK PDF (@media print) --- */
+        /* --- PENGATURAN KHUSUS CETAK PDF --- */
         @media print {
             body { background-color: white !important; }
-            .sidebar { display: none !important; } /* Sembunyikan Sidebar */
+            .sidebar { display: none !important; }
             .content { margin-left: 0 !important; width: 100% !important; padding: 0 !important; }
-            .no-print { display: none !important; } /* Sembunyikan semua tombol saat diprint */
+            .no-print { display: none !important; }
             .card { box-shadow: none !important; border: none !important; padding: 0 !important; }
-            .kop-surat { display: block !important; } /* Munculkan Kop Surat */
+            .kop-surat { display: block !important; }
             h2 { border-bottom: none; margin-bottom: 10px; font-size: 18px; text-align: center; }
-            /* Memaksa background tabel tetap berwarna saat diprint */
             .table-dark th { background-color: #212529 !important; color: white !important; -webkit-print-color-adjust: exact; }
             .bg-warning { background-color: #ffc107 !important; -webkit-print-color-adjust: exact; }
-            .badge { border: 1px solid black; color: black !important; background: transparent !important; } /* Ubah badge jadi kotak biasa agar rapi di kertas */
+            .badge { border: 1px solid black; color: black !important; background: transparent !important; }
         }
     </style>
 </head>
@@ -108,6 +107,13 @@
         </div>
 
         <div class="card p-3">
+            <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+                <h5 class="m-0 text-primary fw-bold">📋 Daftar Karyawan</h5>
+                <button class="btn btn-danger fw-bold shadow-sm" onclick="hapusSemuaKaryawan()">
+                    🗑️ Hapus Semua Data Karyawan
+                </button>
+            </div>
+
             <table class="table table-hover table-bordered mb-0">
                 <thead class="table-dark"><tr><th>ID</th><th>Kode</th><th>Nama</th><th>Divisi</th><th class="no-print">Aksi</th></tr></thead>
                 <tbody id="tabelAlternatif"></tbody>
@@ -118,7 +124,7 @@
     <div id="kriteriaSec" class="hidden">
         <h2>📝 Kriteria Kinerja & Bobot AHP</h2>
 
-        <button type="button" onclick="suntikKriteriaAwal()" class="btn btn-warning mb-3 fw-bold shadow-sm">
+        <button type="button" onclick="suntikKriteriaAwal()" class="btn btn-warning mb-3 fw-bold shadow-sm no-print">
             🚀 Setup Awal 5 Kriteria Dasar
         </button>
 
@@ -132,7 +138,7 @@
             </table>
         </div>
 
-        <div class="card p-4 shadow-sm">
+        <div class="card p-4 shadow-sm no-print">
             <h3 class="border-bottom border-primary pb-2 mb-3">⚖️ Input Matriks Perbandingan AHP</h3>
             <p>Masukkan nilai perbandingan (Contoh: 2, 5, atau 0.333):</p>
 
@@ -163,11 +169,11 @@
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h2>🏆 Laporan Hasil Seleksi Tahap 1 (AHP)</h2>
             <div class="no-print">
-                <button class="btn btn-info text-white fw-bold me-2" onclick="loadRanking()">🔄 Refresh</button>
+                <button class="btn btn-info text-white fw-bold me-2" onclick="loadRanking(null)">🔄 Refresh</button>
                 <button class="btn btn-secondary fw-bold shadow" onclick="window.print()">🖨️ Cetak PDF</button>
             </div>
         </div>
-        
+
         <div class="card p-0 overflow-hidden">
             <table class="table table-hover mb-0 table-bordered">
                 <thead class="bg-warning text-dark"><tr><th class="py-3">Peringkat</th><th class="py-3">Nama Karyawan</th><th class="py-3">Skor (AHP)</th><th class="py-3">Status Evaluasi</th></tr></thead>
@@ -180,11 +186,11 @@
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h2>🤖 Laporan Keputusan Akhir (C4.5 AI)</h2>
             <div class="no-print">
-                <button class="btn btn-info text-white fw-bold me-2" onclick="jalankanC45()">🔄 Refresh Analisa</button>
+                <button class="btn btn-info text-white fw-bold me-2" onclick="loadPrediksiPage(null)">🔄 Refresh Analisa</button>
                 <button class="btn btn-secondary fw-bold shadow" onclick="window.print()">🖨️ Cetak PDF</button>
             </div>
         </div>
-        
+
         <div id="c45ResultContainer">
             <div class="card p-4 mb-4 bg-dark text-white border-warning no-print" style="border-width: 2px;">
                 <h5 class="text-white-50">🌲 Standar Aturan Kinerja RS (Decision Tree):</h5>
@@ -201,6 +207,6 @@
 
 </div>
 
-<script src="script.js?v=4"></script>
+<script src="script.js?v=6"></script>
 </body>
 </html>
